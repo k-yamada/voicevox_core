@@ -194,8 +194,6 @@ jobs:
           fi
       - name: Print target
         run: tree target
-      - name: Print onnxruntime
-        run: target/${{ matrix.target }}/release/build/onnxruntime-sys-*/out/onnxruntime_*/jni
       - name: Organize artifact
         run: |
           mkdir -p "artifact/${{ env.ASSET_NAME }}"
