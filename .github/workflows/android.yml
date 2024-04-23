@@ -1,4 +1,4 @@
-name: build and deploy workflow
+name: Android
 
 # 製品版もビルドできる。製品版ビルド時の違いは以下の3点
 # 1. production環境を使う
