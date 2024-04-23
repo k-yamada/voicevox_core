@@ -192,6 +192,8 @@ jobs:
           else
             build > /dev/null 2>&1
           fi
+      - name: Print target
+        run: tree target
       - name: Organize artifact
         run: |
           mkdir -p "artifact/${{ env.ASSET_NAME }}"
@@ -200,12 +202,13 @@ jobs:
           cp -v target/${{ matrix.target }}/release/voicevox_core.dll.lib "artifact/${{ env.ASSET_NAME }}/voicevox_core.lib" || true
           cp -v -n target/${{ matrix.target }}/release/build/onnxruntime-sys-*/out/onnxruntime_*/onnxruntime-*/lib/*.{dll,so.*,so,dylib} "artifact/${{ env.ASSET_NAME }}" || true
           # libonnxruntimeについてはバージョン付のshared libraryを使用するためバージョンがついてないものを削除する
-          # rm -f artifact/${{ env.ASSET_NAME }}/libonnxruntime.{so,dylib}
+          rm -f artifact/${{ env.ASSET_NAME }}/libonnxruntime.{so,dylib}
           cp -v README.md "artifact/${{ env.ASSET_NAME }}/README.txt"
           echo "${{ env.VERSION }}" > "artifact/${{ env.ASSET_NAME }}/VERSION"
 
           mkdir java_artifact
           cp -v target/${{ matrix.target }}/release/libvoicevox_core_java_api.so java_artifact/ || true
+          cp -v target/${{ matrix.target }}/release/libonnxruntime.so java_artifact/ || true
       - name: Code signing (Windows)
         if: startsWith(matrix.os, 'windows') && inputs.code_signing
         run: bash build_util/codesign.bash "artifact/${{ env.ASSET_NAME }}/voicevox_core.dll"
