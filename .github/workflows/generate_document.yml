@@ -1,8 +1,5 @@
 name: generate API documents
 on:
-  push:
-    branches:
-      - main
   pull_request:
 defaults:
   run:
