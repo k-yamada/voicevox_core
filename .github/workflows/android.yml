@@ -1,0 +1,256 @@
+name: android workflow
+
+# 製品版もビルドできる。製品版ビルド時の違いは以下の3点
+# 1. production環境を使う
+# 2. 製品版リポジトリのコードをmergeする
+# 3. RESOURCEリポジトリからモデルをダウンロードして置き換える
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "バージョン情報（A.BB.C / A.BB.C-preview.D）"
+        required: true
+      code_signing:
+        description: "コード署名する"
+        type: boolean
+        required: false
+        default: false
+      is_production:
+        description: "製品版をビルドする"
+        type: boolean
+        required: false
+        default: false
+  release:
+    types:
+      - published
+  pull_request:
+  push:
+
+env:
+  VOICEVOX_RESOURCE_VERSION: "0.15.0-preview.3"
+  VOICEVOX_FAT_RESOURCE_VERSION: "0.15.0-preview.4"
+  # releaseタグ名か、workflow_dispatchでのバージョン名か、'0.0.0'が入る
+  VERSION: ${{ github.event.release.tag_name || inputs.version || '0.0.0' }}
+  PRODUCTION_REPOSITORY_TAG: "0.15.0-preview.2" # 製品版のタグ名
+  # 簡易テストとするかどうか。releaseとworkflow_dispatch以外は簡易テストとする
+  IS_SIMPLE_TEST: ${{ github.event_name != 'release' && github.event_name != 'workflow_dispatch' }}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  config: # 全 jobs で利用する定数の定義。実行対象の条件をフィルタリングする。
+    runs-on: ubuntu-latest
+    outputs:
+      includes: ${{ steps.strategy_matrix.outputs.includes }}
+      deploy: ${{ env.VERSION != '0.0.0' }}
+      version: ${{ env.VERSION }}
+    steps:
+      - name: declare strategy matrix
+        id: strategy_matrix
+        run: |
+          includes='[
+            {
+              "os": "windows-2019",
+              "features": "",
+              "target": "x86_64-pc-windows-msvc",
+              "artifact_name": "windows-x64-cpu",
+              "whl_local_version": "cpu",
+              "use_cuda": false,
+              "can_skip_in_simple_test": true
+            },
+            {
+              "os": "windows-2019",
+              "features": "directml",
+              "target": "x86_64-pc-windows-msvc",
+              "artifact_name": "windows-x64-directml",
+              "whl_local_version": "directml",
+              "use_cuda": false,
+              "can_skip_in_simple_test": false
+            },
+            {
+              "os": "windows-2019",
+              "features": "",
+              "target": "x86_64-pc-windows-msvc",
+              "artifact_name": "windows-x64-cuda",
+              "whl_local_version": "cuda",
+              "use_cuda": true,
+              "can_skip_in_simple_test": true
+            },
+            {
+              "os": "windows-2019",
+              "features": "",
+              "target": "i686-pc-windows-msvc",
+              "artifact_name": "windows-x86-cpu",
+              "whl_local_version": "cpu",
+              "use_cuda": false,
+              "can_skip_in_simple_test": true
+            },
+            {
+              "os": "ubuntu-20.04",
+              "features": "",
+              "target": "x86_64-unknown-linux-gnu",
+              "artifact_name": "linux-x64-cpu",
+              "whl_local_version": "cpu",
+              "use_cuda": false,
+              "can_skip_in_simple_test": true
+            },
+            {
+              "os": "ubuntu-20.04",
+              "features": "",
+              "target": "x86_64-unknown-linux-gnu",
+              "artifact_name": "linux-x64-gpu",
+              "whl_local_version": "cuda",
+              "use_cuda": true,
+              "can_skip_in_simple_test": false
+            },
+            {
+              "os": "ubuntu-20.04",
+              "features": "",
+              "target": "aarch64-unknown-linux-gnu",
+              "artifact_name": "linux-arm64-cpu",
+              "whl_local_version": "cpu",
+              "use_cuda": false,
+              "can_skip_in_simple_test": true
+            },
+            {
+              "os": "ubuntu-20.04",
+              "features": "",
+              "target": "aarch64-linux-android",
+              "artifact_name": "android-arm64-cpu",
+              "use_cuda": false,
+              "can_skip_in_simple_test": true
+            },
+            {
+              "os": "ubuntu-20.04",
+              "features": "",
+              "target": "x86_64-linux-android",
+              "artifact_name": "android-x86_64-cpu",
+              "use_cuda": false,
+              "can_skip_in_simple_test": true
+            },
+            {
+              "os": "macos-11",
+              "features": "",
+              "target": "aarch64-apple-darwin",
+              "artifact_name": "osx-arm64-cpu",
+              "whl_local_version": "cpu",
+              "use_cuda": false,
+              "can_skip_in_simple_test": false
+            },
+            {
+              "os": "macos-11",
+              "features": "",
+              "target": "x86_64-apple-darwin",
+              "artifact_name": "osx-x64-cpu",
+              "whl_local_version": "cpu",
+              "use_cuda": false,
+              "can_skip_in_simple_test": true
+            },
+            {
+              "os": "macos-12",
+              "features": "",
+              "target": "aarch64-apple-ios",
+              "artifact_name": "ios-arm64-cpu",
+              "use_cuda": false,
+              "can_skip_in_simple_test": true
+            },
+            {
+              "os": "macos-12",
+              "features": "",
+              "target": "aarch64-apple-ios-sim",
+              "artifact_name": "ios-arm64-cpu-sim",
+              "use_cuda": false,
+              "can_skip_in_simple_test": true
+            },
+            {
+              "os": "macos-12",
+              "features": "",
+              "target": "x86_64-apple-ios",
+              "artifact_name": "ios-x64-cpu",
+              "use_cuda": false,
+              "can_skip_in_simple_test": true
+            }
+          ]'
+
+          # FIXME: composite action に切り出す
+          if ${{ env.IS_SIMPLE_TEST }}; then
+            includes=$(echo "$includes" | jq -c '[.[] | select(.can_skip_in_simple_test == false)]')
+          fi
+          includes=$(echo "$includes" | jq -c '[.[] | del(.can_skip_in_simple_test)]')
+          echo "includes=${includes}" >> "$GITHUB_OUTPUT"
+
+  build_java_package:
+    runs-on: ubuntu-latest
+    if: ${{ !(github.event_name != 'release' && github.event_name != 'workflow_dispatch') }} # !env.IS_SIMPLE_TEST と同じ
+    needs: [config, build_and_deploy]
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Rust
+        uses: ./.github/actions/rust-toolchain-from-file
+      - name: Set up Java
+        uses: actions/setup-java@v2
+        with:
+          java-version: "17"
+          distribution: "adopt"
+      - uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r25b
+      - name: Install cargo-binstall
+        uses: taiki-e/install-action@cargo-binstall
+      - name: Install cargo-edit
+        run: cargo binstall cargo-edit@^0.11 --no-confirm
+      - name: set cargo version
+        run: cargo set-version "$VERSION" -p voicevox_core_java_api
+
+      - name: "Download artifact (android-arm64-cpu)"
+        uses: actions/download-artifact@v3
+        with:
+          name: voicevox_core_java_api-android-arm64-cpu
+          path: artifact/android-arm64-cpu
+
+      - name: "Download artifact (android-x86_64-cpu)"
+        uses: actions/download-artifact@v3
+        with:
+          name: voicevox_core_java_api-android-x86_64-cpu
+          path: artifact/android-x86_64-cpu
+
+      - name: Print tree
+        run: tree artifact
+
+      - name: Build voicevoxcore-android
+        run: |
+          rm -rf crates/voicevox_core_java_api/lib/src/main/resources/dll
+          cat <<EOF | while read -r line; do
+          android-arm64-cpu|arm64-v8a
+          android-x86_64-cpu|x86_64
+          EOF
+            IFS='|' read -r artifact_name target <<< "$line"
+            mkdir "crates/voicevox_core_java_api/lib/src/main/resources/jniLibs/${target}/"
+            cp -v "artifact/$artifact_name"/* "crates/voicevox_core_java_api/lib/src/main/resources/jniLibs/${target}/"
+          done
+
+          cp ${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so crates/voicevox_core_java_api/lib/src/main/resources/jniLibs/arm64-v8a/
+          cp ${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android/libc++_shared.so crates/voicevox_core_java_api/lib/src/main/resources/jniLibs/x86_64/
+
+          cd crates/voicevox_core_java_api
+          OS=android DEVICE=cpu gradle publishToMavenLocal
+
+      - name: Package
+        run: |
+          cd ~/.m2/repository
+          rm -rf dev || true
+          zip -r /tmp/java_packages.zip .
+
+      - name: Upload to Release
+        if: fromJson(needs.config.outputs.deploy)
+        uses: softprops/action-gh-release@v1
+        with:
+          prerelease: true
+          tag_name: ${{ env.VERSION }}
+          files: |-
+            /tmp/java_packages.zip
+          target_commitish: ${{ github.sha }}
