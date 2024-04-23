@@ -24,8 +24,6 @@ on:
   release:
     types:
       - published
-  pull_request:
-  push:
 
 env:
   VOICEVOX_RESOURCE_VERSION: "0.15.0-preview.3"
@@ -242,8 +240,7 @@ jobs:
       - name: Raplace resource
         if: inputs.is_production
         shell: bash
-        run:
-          mv -f download/resource/core/README.md ./README.md
+        run: mv -f download/resource/core/README.md ./README.md
       - name: Install cargo-binstall
         uses: taiki-e/install-action@cargo-binstall
       - name: Install cargo-edit
@@ -315,8 +312,7 @@ jobs:
           cp -v target/${{ matrix.target }}/release/libvoicevox_core_java_api.so java_artifact/ || true
       - name: Code signing (Windows)
         if: startsWith(matrix.os, 'windows') && inputs.code_signing
-        run:
-          bash build_util/codesign.bash "artifact/${{ env.ASSET_NAME }}/voicevox_core.dll"
+        run: bash build_util/codesign.bash "artifact/${{ env.ASSET_NAME }}/voicevox_core.dll"
         env:
           ESIGNERCKA_USERNAME: ${{ secrets.ESIGNERCKA_USERNAME }}
           ESIGNERCKA_PASSWORD: ${{ secrets.ESIGNERCKA_PASSWORD }}
@@ -380,10 +376,10 @@ jobs:
           name: voicevox_core-aarch64-apple-ios
           path: ${{ env.IOS_AARCH64_PATH }}
       - name: Create xcframework
-        id: create-xcframework 
+        id: create-xcframework
         run: |
           build_util/make_ios_xcframework.bash
-          echo "output_asset_path=${OUTPUT_ASSET_PATH}" >> "$GITHUB_OUTPUT" 
+          echo "output_asset_path=${OUTPUT_ASSET_PATH}" >> "$GITHUB_OUTPUT"
         env:
           OUTPUT_ASSET_PATH: artifact/voicevox_core-ios-xcframework-cpu
       - name: Archive artifact
@@ -417,8 +413,7 @@ jobs:
       - name: Raplace resource
         if: inputs.is_production
         shell: bash
-        run:
-          rm -r ./model; mv download/fat_resource/core/model ./model
+        run: rm -r ./model; mv download/fat_resource/core/model ./model
       - name: Create artifact
         run: |
           mkdir "artifact"
@@ -459,8 +454,7 @@ jobs:
       - name: Install cargo-edit
         run: cargo binstall cargo-edit@^0.11 --no-confirm
       - name: set cargo version
-        run:
-          cargo set-version "$VERSION" -p voicevox_core_java_api
+        run: cargo set-version "$VERSION" -p voicevox_core_java_api
 
       - name: "Download artifact (android-arm64-cpu)"
         uses: actions/download-artifact@v3
