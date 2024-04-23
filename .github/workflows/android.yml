@@ -59,7 +59,7 @@ jobs:
               "artifact_name": "android-arm64-cpu",
               "use_cuda": false,
               "can_skip_in_simple_test": true
-            },
+            }
           ]'
 
           # FIXME: composite action に切り出す
