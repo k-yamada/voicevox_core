@@ -25,7 +25,6 @@ on:
     types:
       - published
   pull_request:
-  push:
 
 env:
   VOICEVOX_RESOURCE_VERSION: "0.15.0-preview.3"
@@ -201,7 +200,7 @@ jobs:
           cp -v target/${{ matrix.target }}/release/voicevox_core.dll.lib "artifact/${{ env.ASSET_NAME }}/voicevox_core.lib" || true
           cp -v -n target/${{ matrix.target }}/release/build/onnxruntime-sys-*/out/onnxruntime_*/onnxruntime-*/lib/*.{dll,so.*,so,dylib} "artifact/${{ env.ASSET_NAME }}" || true
           # libonnxruntimeについてはバージョン付のshared libraryを使用するためバージョンがついてないものを削除する
-          rm -f artifact/${{ env.ASSET_NAME }}/libonnxruntime.{so,dylib}
+          # rm -f artifact/${{ env.ASSET_NAME }}/libonnxruntime.{so,dylib}
           cp -v README.md "artifact/${{ env.ASSET_NAME }}/README.txt"
           echo "${{ env.VERSION }}" > "artifact/${{ env.ASSET_NAME }}/VERSION"
 
@@ -226,15 +225,6 @@ jobs:
           tag_name: ${{ env.VERSION }}
           files: |-
             ${{ env.ASSET_NAME }}.zip
-          target_commitish: ${{ github.sha }}
-      - name: Upload Python whl to Release
-        if: fromJson(needs.config.outputs.deploy) && matrix.whl_local_version
-        uses: softprops/action-gh-release@v1
-        with:
-          prerelease: true
-          tag_name: ${{ env.VERSION }}
-          files: |-
-            ${{ steps.build-voicevox-core-python-api.outputs.whl }}
           target_commitish: ${{ github.sha }}
       - name: Upload voicevox_core_java_api artifact
         if: fromJson(needs.config.outputs.deploy) && contains(matrix.target, 'android')
